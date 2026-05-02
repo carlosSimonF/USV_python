@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GCS - USV Controller</title>
+    <script src="/static/tailwind.js"></script>
+    <style>
+        /* Evita zoom y selecciones accidentales en el móvil */
+        body { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+        /* Efecto de pulsación para los botones */
+        .btn-active { transform: scale(0.90); filter: brightness(1.2); }
+        /* Estilo personalizado para el slider */
+        input[type=range] { accent-color: #3b82f6; }
+    </style>
+</head>
+<body class="bg-gray-950 text-white font-sans h-screen flex flex-col">
+
+    <header class="bg-gray-900 p-4 shadow-lg flex justify-between items-center border-b border-gray-800 z-10">
+        <h1 class="text-xl font-bold text-blue-500 tracking-wider">USV CONTROL</h1>
+        <div id="status-badge" class="px-3 py-1 rounded-full bg-red-500/20 text-red-500 font-bold text-sm flex items-center gap-2 border border-red-500/50">
+            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+            DESCONECTADO
+        </div>
+    </header>
+
+    <main class="flex-1 p-3 flex flex-col gap-4 overflow-y-auto">
+    
+        <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-xs text-gray-400 uppercase tracking-widest font-semibold">Visión de Proa</h2>
+                <span class="text-xs font-bold text-red-500 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span> REC
+                </span>
+            </div>
+            <div class="w-full bg-black rounded-xl overflow-hidden border border-gray-800 aspect-video flex justify-center items-center">
+                <img src="http://10.42.0.1:8080/?action=stream" alt="Cámara en directo..." class="w-full h-full object-cover">
+            </div>
+        </div>
+        
+        <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
+            <h2 class="text-xs text-gray-400 uppercase tracking-widest mb-3 font-semibold">Telemetría en Vivo</h2>
+            <div class="grid grid-cols-3 gap-3">
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col items-center justify-center">
+                    <span class="text-gray-500 text-[10px] uppercase">Rumbo</span>
+                    <span id="txt-rumbo" class="text-xl font-bold text-white">---º</span>
+                </div>
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col items-center justify-center">
+                    <span class="text-gray-500 text-[10px] uppercase">Distancia</span>
+                    <span id="txt-dist" class="text-xl font-bold text-blue-400">--- m</span>
+                </div>
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col items-center justify-center">
+                    <span class="text-gray-500 text-[10px] uppercase">Agua</span>
+                    <span id="txt-temp" class="text-xl font-bold text-orange-400">--- ºC</span>
+                </div>
+                
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col items-center justify-center col-span-3">
+                    <span class="text-gray-500 text-[10px] uppercase">Posición GPS</span>
+                    <span id="txt-gps" class="text-lg font-mono text-gray-300">Lat: --- | Lon: ---</span>
+                </div>
+                <div class="flex justify-between col-span-3 mt-1 px-2">
+                    <span class="text-xs text-gray-500">Calibración IMU: <span id="txt-calib" class="font-bold text-yellow-500">0/3</span></span>
+                    <span class="text-xs text-gray-500">Modo: <span id="txt-modo" class="font-bold text-white">---</span></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-xs text-gray-400 uppercase tracking-widest font-semibold">Piloto Automático</h2>
+                <span class="text-xs font-bold text-blue-400 bg-blue-900/30 px-3 py-1 rounded-lg">Ruta: <span id="txt-ruta-count" class="text-white">0</span> Puntos</span>
+            </div>
+            
+            <div class="flex gap-2 mb-3">
+                <input type="number" id="input-lat" placeholder="Latitud" class="w-1/2 bg-gray-950 text-white px-4 py-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition text-center font-mono text-sm">
+                <input type="number" id="input-lon" placeholder="Longitud" class="w-1/2 bg-gray-950 text-white px-4 py-3 rounded-xl border border-gray-700 outline-none focus:border-blue-500 transition text-center font-mono text-sm">
+            </div>
+            
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="añadirWaypoint()" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white py-2 rounded-xl font-bold transition text-xs flex flex-col items-center justify-center">
+                    <span class="text-lg mb-1">➕</span> AÑADIR
+                </button>
+                <button onclick="borrarRuta()" class="bg-red-900 hover:bg-red-800 text-red-200 py-2 rounded-xl font-bold transition text-xs border border-red-700 flex flex-col items-center justify-center">
+                    <span class="text-lg mb-1">🗑️</span> BORRAR
+                </button>
+                <button onclick="enviarComando('AUTO')" class="bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl font-bold transition shadow-lg shadow-emerald-900/50 text-xs flex flex-col items-center justify-center">
+                    <span class="text-lg mb-1">▶</span> INICIAR
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-lg flex-1 flex flex-col relative">
+            
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xs text-gray-400 uppercase tracking-widest font-semibold">Control Manual</h2>
+                <button onmousedown="enviarComando('MANUAL')" ontouchstart="enviarComando('MANUAL')" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-lg shadow-red-900/50 transition border border-red-500">🛑 STOP AUTO</button>
+            </div>
+
+            <div class="mb-6 bg-gray-950 p-4 rounded-xl border border-gray-800">
+                <div class="flex justify-between text-xs text-gray-400 font-bold mb-2">
+                    <span>POTENCIA MOTORES</span>
+                    <span id="speed-label" class="text-blue-400 text-sm">50%</span>
+                </div>
+                <input type="range" id="speed-slider" min="0" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+            </div>
+
+            <div class="flex-1 flex items-center justify-center pb-4">
+                <div class="grid grid-cols-3 grid-rows-3 gap-3 place-items-center">
+                    
+                    <button class="control-btn bg-gray-800 border border-gray-700 rounded-2xl w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-3xl shadow-md transition-transform" data-cmd="UPL">↖</button>
+                    <button class="control-btn bg-blue-600 border border-blue-500 rounded-2xl w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-4xl shadow-lg shadow-blue-900/50 transition-transform" data-cmd="UP">⬆</button>
+                    <button class="control-btn bg-gray-800 border border-gray-700 rounded-2xl w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-3xl shadow-md transition-transform" data-cmd="UPR">↗</button>
+                    
+                    <button class="control-btn bg-blue-600 border border-blue-500 rounded-2xl w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-4xl shadow-lg shadow-blue-900/50 transition-transform" data-cmd="LEFT">⬅</button>
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 bg-gray-950 rounded-full border-4 border-gray-800 shadow-inner flex items-center justify-center">
+                        <div class="w-6 h-6 bg-gray-800 rounded-full"></div>
+                    </div>
+                    <button class="control-btn bg-blue-600 border border-blue-500 rounded-2xl w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-4xl shadow-lg shadow-blue-900/50 transition-transform" data-cmd="RIGHT">➡</button>
+                    
+                    <div></div>
+                    <button class="control-btn bg-gray-800 border border-gray-700 rounded-2xl w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-4xl shadow-md transition-transform" data-cmd="DOWN">⬇</button>
+                    <div></div>
+                    
+                </div>
+            </div>
+            
+        </div>
+
+    </main>
+
+    <script>
+        // 1. Enviar comandos básicos
+        function enviarComando(comando) {
+            fetch('/comando', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cmd: comando })
+            }).catch(e => console.log("Error de red"));
+        }
+
+        // 🚀 2. Enviar Waypoint a la Lista
+        function añadirWaypoint() {
+            const lat = document.getElementById('input-lat').value;
+            const lon = document.getElementById('input-lon').value;
+            if(!lat || !lon) { alert("⚠️ Por favor, introduce latitud y longitud antes de añadir."); return; }
+            
+            fetch('/comando', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cmd: 'ADD_WPT', lat: lat, lon: lon })
+            }).then(() => {
+                // Limpiamos las casillas al enviarlo para meter el siguiente rápido
+                document.getElementById('input-lat').value = '';
+                document.getElementById('input-lon').value = '';
+            });
+        }
+
+        // 🚀 3. Borrar la Ruta
+        function borrarRuta() {
+            if(confirm("¿Estás seguro de que quieres borrar toda la ruta? El barco pasará a modo Manual.")) {
+                enviarComando('CLEAR_WPT');
+            }
+        }
+
+        // 4. Control del Slider de Velocidad
+        const slider = document.getElementById('speed-slider');
+        const speedLabel = document.getElementById('speed-label');
+        
+        slider.addEventListener('change', (e) => {
+            const val = e.target.value;
+            speedLabel.innerText = val + '%';
+            enviarComando(`SPD|${val}`);
+        });
+
+        // 5. Lógica del Joystick
+        const botonesControl = document.querySelectorAll('.control-btn');
+        botonesControl.forEach(btn => {
+            const cmd = btn.getAttribute('data-cmd');
+            
+            // Táctil (Móvil)
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); btn.classList.add('btn-active'); enviarComando(cmd); });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); btn.classList.remove('btn-active'); enviarComando('STOP'); });
+            
+            // Ratón (PC)
+            btn.addEventListener('mousedown', () => { btn.classList.add('btn-active'); enviarComando(cmd); });
+            btn.addEventListener('mouseup', () => { btn.classList.remove('btn-active'); enviarComando('STOP'); });
+            btn.addEventListener('mouseleave', () => { btn.classList.remove('btn-active'); enviarComando('STOP'); });
+        });
+
+        // 6. Bucle de Telemetría (Pregunta 2 veces por segundo)
+        setInterval(() => {
+            fetch('/telemetria')
+                .then(response => response.json())
+                .then(data => {
+                    // Actualizamos textos
+                    document.getElementById('txt-rumbo').innerText = data.rumbo + "º";
+                    document.getElementById('txt-gps').innerText = `Lat: ${data.latitud} | Lon: ${data.longitud}`;
+                    document.getElementById('txt-calib').innerText = data.calibracion + "/3";
+                    document.getElementById('txt-dist').innerText = data.distancia + " m";
+                    document.getElementById('txt-modo').innerText = data.modo;
+                    
+                    // 🚀 Actualizamos el número de puntos de la ruta y la temperatura
+                    document.getElementById('txt-ruta-count').innerText = data.puntos_restantes;
+                    document.getElementById('txt-temp').innerText = data.temperatura + " ºC";
+                    
+                    // Actualizamos semáforo de conexión a VERDE
+                    const badge = document.getElementById('status-badge');
+                    badge.className = "px-3 py-1 rounded-full bg-green-500/20 text-green-500 font-bold text-sm flex items-center gap-2 border border-green-500/50";
+                    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-500"></span> CONECTADO`;
+                    
+                    document.getElementById('txt-calib').className = data.calibracion == 3 ? "font-bold text-green-400" : "font-bold text-yellow-500";
+                })
+                .catch(error => {
+                    // Semáforo de conexión a ROJO
+                    const badge = document.getElementById('status-badge');
+                    badge.className = "px-3 py-1 rounded-full bg-red-500/20 text-red-500 font-bold text-sm flex items-center gap-2 border border-red-500/50";
+                    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> DESCONECTADO`;
+                });
+        }, 500);
+    </script>
+</body>
+</html>
