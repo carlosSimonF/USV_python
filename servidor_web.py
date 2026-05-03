@@ -18,7 +18,7 @@ import adafruit_bno055
 # --- INICIALIZAR FLASK ---
 app = Flask(__name__)
 
-# --- CONFIGURACIÓN DE PINES Y ESCs (INTOCABLE) ---
+# --- CONFIGURACIÓN DE PINES Y ESCs ---
 PIN_ESC_IZQ = 27 
 PIN_ESC_DER = 17
 
@@ -44,9 +44,9 @@ datos_sensores = {
 }
 
 # --- CONFIGURACIÓN PID ---
-kp = 1.8   # Proporcional: Cuánto reacciona al error actual
-ki = 0.01  # Integral: Corrige desviaciones constantes (viento/corriente)
-kd = 0.5   # Derivativo: Amortigua el giro para que no se pase de largo
+kp = 1.8   # Variable Proporcional
+ki = 0.01  # Variable Integral
+kd = 0.5   # Variable Derivativa
 
 error_previo = 0
 integral = 0
@@ -54,7 +54,7 @@ last_time = time.time()
 
 # NUEVAS VARIABLES DE ESTADO DEL PILOTO (MÚLTIPLES WAYPOINTS)
 MODO_AUTO = False
-lista_waypoints = []  # Aquí guardaremos todos los puntos de la ruta
+lista_waypoints = []  # Para guardar los waypoints
 
 # --- INICIALIZACIÓN PIGPIO ---
 pi = pigpio.pi()
@@ -164,7 +164,7 @@ def hilo_temperatura():
                         datos_sensores["temperatura"] = float(temp_str) / 1000.0
             except:
                 pass
-        time.sleep(2)  # El agua cambia de temperatura despacio, leemos cada 2 segundos        
+        time.sleep(2)  # Se repite cada 2 segundos        
 
 # ====================================================================
 # CONTROL DE MOTORES INTOCABLE
@@ -209,14 +209,14 @@ def hilo_autonomo():
             rumbo = datos_sensores["rumbo"]
 
             if lat != 0.0 and lon != 0.0:
-                # 1. ¿A qué distancia estamos?
+                #¿Distancia?
                 dist = calcular_distancia(lat, lon, destino_lat, destino_lon)
                 datos_sensores["distancia_wpt"] = dist
                 
-                # 2. ¿Hacia dónde tenemos que mirar?
+                #¿Rumbo?
                 rumbo_obj = calcular_rumbo_deseado(lat, lon, destino_lat, destino_lon)
 
-                # 3. ¿Cuánto nos equivocamos al mirar? (Error)
+                #¿Error?
                 error = rumbo_obj - rumbo
                 if error > 180: error -= 360
                 if error < -180: error += 360
@@ -240,7 +240,7 @@ def hilo_autonomo():
                     # --- CÁLCULO PID ---
                     proporcional = error
                     integral += error * dt
-                    integral = max(-50, min(50, integral)) # Anti-windup
+                    integral = max(-50, min(50, integral)) 
                     derivativo = (error - error_previo) / dt
                     
                     salida_pid = (kp * proporcional) + (ki * integral) + (kd * derivativo)
@@ -304,7 +304,6 @@ def comando():
     data = request.json
     cmd = data.get('cmd', '').upper()
     
-    # Comandos Silenciosos (Para no llenar la terminal de basura)
     if not (cmd in ["UP", "DOWN", "LEFT", "RIGHT", "UPL", "UPR", "STOP"]):
         print(f"[WEB] Comando recibido: {cmd}")
 
@@ -316,7 +315,6 @@ def comando():
         except: pass
         return jsonify({"status": "ok"})
 
-    # 🚀 NUEVOS COMANDOS PARA LA RUTA
     if cmd == "ADD_WPT":
         try:
             lat = float(data.get('lat', 0.0))
