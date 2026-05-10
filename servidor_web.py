@@ -46,7 +46,7 @@ datos_sensores = {
 # --- CONFIGURACIÓN PID ---
 kp = 1.8   # Variable Proporcional
 ki = 0.01  # Variable Integral
-kd = 0.5   # Variable Derivativa
+kd = 0.15   # Variable Derivativa
 
 error_previo = 0
 integral = 0
