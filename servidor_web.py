@@ -56,6 +56,11 @@ last_time = time.time()
 MODO_AUTO = False
 lista_waypoints = []  # Para guardar los waypoints
 
+# --- WATCHDOG DE SEGURIDAD POR PÉRDIDA DE COMUNICACIÓN ---
+ultimo_contacto_cliente = time.time()
+TIMEOUT_CLIENTE = 2.0  # segundos sin contacto antes de detener motores
+watchdog_activado = True
+
 # --- INICIALIZACIÓN PIGPIO ---
 pi = pigpio.pi()
 if not pi.connected:
@@ -191,6 +196,21 @@ def move_fwd_right():
     p_full = calcular_pulso(1)
     pi.set_servo_pulsewidth(PIN_ESC_IZQ, p_full)
     pi.set_servo_pulsewidth(PIN_ESC_DER, int(PULSE_STOP + (p_full - PULSE_STOP) * 0.5))
+    
+def watchdog_cliente():
+    global MODO_AUTO, ultimo_contacto_cliente
+
+    while True:
+        tiempo_sin_contacto = time.time() - ultimo_contacto_cliente
+
+        if watchdog_activado and tiempo_sin_contacto > TIMEOUT_CLIENTE:
+            if MODO_AUTO:
+                print("[WATCHDOG] Pérdida de comunicación. AUTO desactivado y motores detenidos.")
+
+            MODO_AUTO = False
+            stop_motors()
+
+        time.sleep(0.1)
 
 # ====================================================================
 # HILO DEL PILOTO AUTOMÁTICO (ACTUALIZADO PARA RUTAS)
@@ -285,7 +305,11 @@ def index():
 
 @app.route('/telemetria')
 def telemetria():
+    global ultimo_contacto_cliente
+    ultimo_contacto_cliente = time.time()
+
     modo_str = "AUTO" if MODO_AUTO else "MANUAL"
+    
     return jsonify({
         "rumbo": round(datos_sensores["rumbo"], 1),
         "latitud": round(datos_sensores["latitud"], 6),
@@ -299,7 +323,9 @@ def telemetria():
 
 @app.route('/comando', methods=['POST'])
 def comando():
-    global MODO_AUTO, lista_waypoints, FACTOR_POTENCIA
+    global MODO_AUTO, lista_waypoints, FACTOR_POTENCIA, ultimo_contacto_cliente
+    
+    ultimo_contacto_cliente = time.time()
     
     data = request.json
     cmd = data.get('cmd', '').upper()
@@ -364,6 +390,7 @@ if __name__ == "__main__":
     threading.Thread(target=leer_gps, daemon=True).start()
     threading.Thread(target=hilo_autonomo, daemon=True).start()
     threading.Thread(target=hilo_temperatura, daemon=True).start()
+    threading.Thread(target=watchdog_cliente, daemon=True).start()
 
     print("\n" + "="*50)
     print("   🚀 ESTACIÓN DE CONTROL WEB USV ONLINE")
