@@ -165,11 +165,11 @@ def hilo_temperatura():
                     pos_igual = lineas[1].find('t=')
                     if pos_igual != -1:
                         temp_str = lineas[1][pos_igual+2:]
-                        # Convertimos a Celsius y guardamos en la variable global
+                        # Convertimos a Celsius y guardamos
                         datos_sensores["temperatura"] = float(temp_str) / 1000.0
             except:
                 pass
-        time.sleep(2)  # Se repite cada 2 segundos        
+        time.sleep(2)      
 
 # ====================================================================
 # CONTROL DE MOTORES INTOCABLE
@@ -218,7 +218,7 @@ def watchdog_cliente():
 def hilo_autonomo():
     global MODO_AUTO, lista_waypoints, error_previo, integral, last_time
     while True:
-        # Solo navegamos si estamos en AUTO y HAY puntos en la lista
+        # Solo navegamos si estamos en AUTO y hay puntos en la lista
         if MODO_AUTO and len(lista_waypoints) > 0:
             objetivo_actual = lista_waypoints[0] # Siempre miramos al punto 0 de la lista
             destino_lat = objetivo_actual['lat']
@@ -270,20 +270,17 @@ def hilo_autonomo():
 
                     # --- GESTIÓN DE POTENCIA DINÁMICA (SLIDER) ---
                     
-                    # 1. El slider marca el LÍMITE MÁXIMO absoluto en tiempo real
+                    # 1. El slider marca el LÍMITE MÁXIMO absoluto
                     pulso_limite_dinamico = int(PULSE_STOP + (PULSE_MAX_FWD - PULSE_STOP) * FACTOR_POTENCIA)
                     
                     # 2. Velocidad de crucero base (80% del límite del slider)
-                    # Esto deja un 20% de "margen" para que el PID acelere un motor en las curvas
                     pulso_base = int(PULSE_STOP + (PULSE_MAX_FWD - PULSE_STOP) * (FACTOR_POTENCIA * 0.8))
                     
-                    # 3. El PID suma potencia a un motor y se la resta al otro para girar
+                    # 3. El PID suma potencia a un motor y se la resta al otro
                     pulso_izq = pulso_base + salida_pid
                     pulso_der = pulso_base - salida_pid
 
                     # 4. CORTAFUEGOS DE SEGURIDAD
-                    # No permitimos que bajen de STOP (para no ir marcha atrás en modo AUTO)
-                    # Ni que superen el límite que hayas puesto con el slider en la web
                     pulso_izq = max(PULSE_STOP, min(pulso_limite_dinamico, pulso_izq))
                     pulso_der = max(PULSE_STOP, min(pulso_limite_dinamico, pulso_der))
 
@@ -292,9 +289,9 @@ def hilo_autonomo():
                     pi.set_servo_pulsewidth(PIN_ESC_DER, int(pulso_der))
         else:
             datos_sensores["distancia_wpt"] = 0.0
-            integral = 0 # Resetear si no estamos en auto
+            integral = 0 
             
-        time.sleep(0.1) # Aumentamos a 10Hz para que el PID sea más estable
+        time.sleep(0.1)
 
 # ====================================================================
 # RUTAS DEL SERVIDOR WEB (FLASK)
