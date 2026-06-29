@@ -1,5 +1,5 @@
 # ====================================================================
-# CEREBRO WEB V2.0 - MISIÓN AUTÓNOMA DE MÚLTIPLES WAYPOINTS
+# CÓDIGO PRINCIPAL
 # ====================================================================
 import threading
 import time
@@ -18,7 +18,7 @@ import adafruit_bno055
 # --- INICIALIZAR FLASK ---
 app = Flask(__name__)
 
-# --- CONFIGURACIÓN DE PINES Y ESCs ---
+# --- CONFIGURACIÓN DE PINES Y ESCs
 PIN_ESC_IZQ = 27 
 PIN_ESC_DER = 17
 
@@ -44,22 +44,16 @@ datos_sensores = {
 }
 
 # --- CONFIGURACIÓN PID ---
-kp = 1.8   # Variable Proporcional
-ki = 0.01  # Variable Integral
-kd = 0.15   # Variable Derivativa
+kp = 1.8   # Proporcional
+ki = 0.01  # Integral
+kd = 0.5   # Derivativo
 
 error_previo = 0
 integral = 0
 last_time = time.time()
 
-# NUEVAS VARIABLES DE ESTADO DEL PILOTO (MÚLTIPLES WAYPOINTS)
 MODO_AUTO = False
-lista_waypoints = []  # Para guardar los waypoints
-
-# --- WATCHDOG DE SEGURIDAD POR PÉRDIDA DE COMUNICACIÓN ---
-ultimo_contacto_cliente = time.time()
-TIMEOUT_CLIENTE = 2.0  # segundos sin contacto antes de detener motores
-watchdog_activado = True
+lista_waypoints = []
 
 # --- INICIALIZACIÓN PIGPIO ---
 pi = pigpio.pi()
@@ -165,12 +159,11 @@ def hilo_temperatura():
                     pos_igual = lineas[1].find('t=')
                     if pos_igual != -1:
                         temp_str = lineas[1][pos_igual+2:]
-                        # Convertimos a Celsius y guardamos
+                        # Convertimos a Celsius y guardamos en la variable global
                         datos_sensores["temperatura"] = float(temp_str) / 1000.0
             except:
                 pass
-        time.sleep(2)      
-
+        time.sleep(2) 
 # ====================================================================
 # CONTROL DE MOTORES INTOCABLE
 # ====================================================================
@@ -196,21 +189,6 @@ def move_fwd_right():
     p_full = calcular_pulso(1)
     pi.set_servo_pulsewidth(PIN_ESC_IZQ, p_full)
     pi.set_servo_pulsewidth(PIN_ESC_DER, int(PULSE_STOP + (p_full - PULSE_STOP) * 0.5))
-    
-def watchdog_cliente():
-    global MODO_AUTO, ultimo_contacto_cliente
-
-    while True:
-        tiempo_sin_contacto = time.time() - ultimo_contacto_cliente
-
-        if watchdog_activado and tiempo_sin_contacto > TIMEOUT_CLIENTE:
-            if MODO_AUTO:
-                print("[WATCHDOG] Pérdida de comunicación. AUTO desactivado y motores detenidos.")
-
-            MODO_AUTO = False
-            stop_motors()
-
-        time.sleep(0.1)
 
 # ====================================================================
 # HILO DEL PILOTO AUTOMÁTICO (ACTUALIZADO PARA RUTAS)
@@ -218,9 +196,8 @@ def watchdog_cliente():
 def hilo_autonomo():
     global MODO_AUTO, lista_waypoints, error_previo, integral, last_time
     while True:
-        # Solo navegamos si estamos en AUTO y hay puntos en la lista
         if MODO_AUTO and len(lista_waypoints) > 0:
-            objetivo_actual = lista_waypoints[0] # Siempre miramos al punto 0 de la lista
+            objetivo_actual = lista_waypoints[0] 
             destino_lat = objetivo_actual['lat']
             destino_lon = objetivo_actual['lon']
 
@@ -229,14 +206,14 @@ def hilo_autonomo():
             rumbo = datos_sensores["rumbo"]
 
             if lat != 0.0 and lon != 0.0:
-                #¿Distancia?
+                # 1. Distancia
                 dist = calcular_distancia(lat, lon, destino_lat, destino_lon)
                 datos_sensores["distancia_wpt"] = dist
                 
-                #¿Rumbo?
+                # 2. Rumbo
                 rumbo_obj = calcular_rumbo_deseado(lat, lon, destino_lat, destino_lon)
 
-                #¿Error?
+                # 3. Error
                 error = rumbo_obj - rumbo
                 if error > 180: error -= 360
                 if error < -180: error += 360
@@ -260,7 +237,7 @@ def hilo_autonomo():
                     # --- CÁLCULO PID ---
                     proporcional = error
                     integral += error * dt
-                    integral = max(-50, min(50, integral)) 
+                    integral = max(-50, min(50, integral)) # Anti-windup
                     derivativo = (error - error_previo) / dt
                     
                     salida_pid = (kp * proporcional) + (ki * integral) + (kd * derivativo)
@@ -270,13 +247,13 @@ def hilo_autonomo():
 
                     # --- GESTIÓN DE POTENCIA DINÁMICA (SLIDER) ---
                     
-                    # 1. El slider marca el LÍMITE MÁXIMO absoluto
+                    # 1. El slider marca el LÍMITE MÁXIMO absoluto en tiempo real
                     pulso_limite_dinamico = int(PULSE_STOP + (PULSE_MAX_FWD - PULSE_STOP) * FACTOR_POTENCIA)
                     
                     # 2. Velocidad de crucero base (80% del límite del slider)
                     pulso_base = int(PULSE_STOP + (PULSE_MAX_FWD - PULSE_STOP) * (FACTOR_POTENCIA * 0.8))
                     
-                    # 3. El PID suma potencia a un motor y se la resta al otro
+                    # 3. El PID suma potencia a un motor y se la resta al otro para girar
                     pulso_izq = pulso_base + salida_pid
                     pulso_der = pulso_base - salida_pid
 
@@ -289,9 +266,9 @@ def hilo_autonomo():
                     pi.set_servo_pulsewidth(PIN_ESC_DER, int(pulso_der))
         else:
             datos_sensores["distancia_wpt"] = 0.0
-            integral = 0 
+            integral = 0 # Resetear si no estamos en auto
             
-        time.sleep(0.1)
+        time.sleep(0.1) # Aumentamos a 10Hz para que el PID sea más estable
 
 # ====================================================================
 # RUTAS DEL SERVIDOR WEB (FLASK)
@@ -302,11 +279,7 @@ def index():
 
 @app.route('/telemetria')
 def telemetria():
-    global ultimo_contacto_cliente
-    ultimo_contacto_cliente = time.time()
-
     modo_str = "AUTO" if MODO_AUTO else "MANUAL"
-    
     return jsonify({
         "rumbo": round(datos_sensores["rumbo"], 1),
         "latitud": round(datos_sensores["latitud"], 6),
@@ -320,9 +293,7 @@ def telemetria():
 
 @app.route('/comando', methods=['POST'])
 def comando():
-    global MODO_AUTO, lista_waypoints, FACTOR_POTENCIA, ultimo_contacto_cliente
-    
-    ultimo_contacto_cliente = time.time()
+    global MODO_AUTO, lista_waypoints, FACTOR_POTENCIA
     
     data = request.json
     cmd = data.get('cmd', '').upper()
@@ -337,7 +308,6 @@ def comando():
             print(f">> Potencia ajustada al {val}%")
         except: pass
         return jsonify({"status": "ok"})
-
     if cmd == "ADD_WPT":
         try:
             lat = float(data.get('lat', 0.0))
@@ -387,7 +357,6 @@ if __name__ == "__main__":
     threading.Thread(target=leer_gps, daemon=True).start()
     threading.Thread(target=hilo_autonomo, daemon=True).start()
     threading.Thread(target=hilo_temperatura, daemon=True).start()
-    threading.Thread(target=watchdog_cliente, daemon=True).start()
 
     print("\n" + "="*50)
     print("   🚀 ESTACIÓN DE CONTROL WEB USV ONLINE")
