@@ -46,7 +46,7 @@ datos_sensores = {
 # --- CONFIGURACIÓN PID ---
 kp = 1.8   # Proporcional
 ki = 0.01  # Integral
-kd = 0.5   # Derivativo
+kd = 0.15   # Derivativo
 
 error_previo = 0
 integral = 0
@@ -164,13 +164,13 @@ def hilo_temperatura():
                     pos_igual = lineas[1].find('t=')
                     if pos_igual != -1:
                         temp_str = lineas[1][pos_igual+2:]
-                        # Convertimos a Celsius y guardamos en la variable global
+                        # Convertimos a Celsius y guardamos
                         datos_sensores["temperatura"] = float(temp_str) / 1000.0
             except:
                 pass
         time.sleep(2) 
 # ====================================================================
-# CONTROL DE MOTORES INTOCABLE
+# CONTROL DE MOTORES
 # ====================================================================
 def calcular_pulso(direccion):
     if direccion == 0: return PULSE_STOP
@@ -226,8 +226,9 @@ def hilo_failsafe():
         time.sleep(0.1)
 
 # ====================================================================
-# HILO DEL PILOTO AUTOMÁTICO (ACTUALIZADO PARA RUTAS)
+# PILOTO AUTOMÁTICO
 # ====================================================================
+
 def hilo_autonomo():
     global MODO_AUTO, lista_waypoints, error_previo, integral, last_time
     while True:
