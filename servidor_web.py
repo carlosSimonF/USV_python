@@ -55,6 +55,11 @@ last_time = time.time()
 MODO_AUTO = False
 lista_waypoints = []
 
+# --- CONFIGURACIÓN FAILSAFE ---
+FAILSAFE_TIMEOUT = 2.0  # segundos sin comunicación antes de detener el USV
+ultimo_contacto = time.monotonic()
+failsafe_activado = False
+
 # --- INICIALIZACIÓN PIGPIO ---
 pi = pigpio.pi()
 if not pi.connected:
@@ -191,6 +196,36 @@ def move_fwd_right():
     pi.set_servo_pulsewidth(PIN_ESC_DER, int(PULSE_STOP + (p_full - PULSE_STOP) * 0.5))
 
 # ====================================================================
+# FAILSAFE
+# ====================================================================
+def registrar_contacto():
+    global ultimo_contacto, failsafe_activado
+
+    ultimo_contacto = time.monotonic()
+
+    if failsafe_activado:
+        print("[FAILSAFE] ✅ Comunicación recuperada.")
+        failsafe_activado = False
+
+def hilo_failsafe():
+    global MODO_AUTO, failsafe_activado
+
+    while True:
+        tiempo_sin_contacto = time.monotonic() - ultimo_contacto
+
+        if tiempo_sin_contacto > FAILSAFE_TIMEOUT and not failsafe_activado:
+            failsafe_activado = True
+            MODO_AUTO = False
+            stop_motors()
+
+            print(
+                f"[FAILSAFE] ⚠️ Comunicación perdida durante "
+                f"{tiempo_sin_contacto:.1f} s. MOTORES DETENIDOS."
+            )
+
+        time.sleep(0.1)
+
+# ====================================================================
 # HILO DEL PILOTO AUTOMÁTICO (ACTUALIZADO PARA RUTAS)
 # ====================================================================
 def hilo_autonomo():
@@ -279,6 +314,8 @@ def index():
 
 @app.route('/telemetria')
 def telemetria():
+
+    registrar_contacto()
     modo_str = "AUTO" if MODO_AUTO else "MANUAL"
     return jsonify({
         "rumbo": round(datos_sensores["rumbo"], 1),
@@ -294,6 +331,8 @@ def telemetria():
 @app.route('/comando', methods=['POST'])
 def comando():
     global MODO_AUTO, lista_waypoints, FACTOR_POTENCIA
+
+    registrar_contacto()
     
     data = request.json
     cmd = data.get('cmd', '').upper()
@@ -357,6 +396,7 @@ if __name__ == "__main__":
     threading.Thread(target=leer_gps, daemon=True).start()
     threading.Thread(target=hilo_autonomo, daemon=True).start()
     threading.Thread(target=hilo_temperatura, daemon=True).start()
+    threading.Thread(target=hilo_failsafe, daemon=True).start()
 
     print("\n" + "="*50)
     print("   🚀 ESTACIÓN DE CONTROL WEB USV ONLINE")
